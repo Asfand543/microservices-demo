@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------
+  # 1) TEST: run Go unit tests for the Go-based services
+  # ---------------------------------------------------------------
+  test-go:
+    name: Test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - frontend
+          - checkoutservice
+          - productcatalogservice
+          - shippingservice
+    defaults:
+      run:
+        working-directory: src/${{ matrix.service }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/${{ matrix.service }}/go.mod
+          cache-dependency-path: src/${{ matrix.service }}/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./... -v
+
+  # ---------------------------------------------------------------
+  # 2) BUILD -> SCAN (Trivy) -> PUSH (GitHub Container Registry)
+  # ---------------------------------------------------------------
+  build-scan-push:
+    name: Build & Scan (${{ matrix.service }})
+    needs: test-go
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # push images to ghcr.io
+      security-events: write   # upload Trivy results to the Security tab
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: adservice
+            context: src/adservice
+          - service: cartservice
+            context: src/cartservice/src
+          - service: checkoutservice
+            context: src/checkoutservice
+          - service: currencyservice
+            context: src/currencyservice
+          - service: emailservice
+            context: src/emailservice
+          - service: frontend
+            context: src/frontend
+          - service: loadgenerator
+            context: src/loadgenerator
+          - service: paymentservice
+            context: src/paymentservice
+          - service: productcatalogservice
+            context: src/productcatalogservice
+          - service: recommendationservice
+            context: src/recommendationservice
+          - service: shippingservice
+            context: src/shippingservice
+    env:
+      LOCAL_IMAGE: boutique/${{ matrix.service }}:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ghcr.io requires a lowercase owner name
+      - name: Set lowercase owner
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (local, not pushed yet)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          load: true
+          push: false
+          tags: ${{ env.LOCAL_IMAGE }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      # Human-readable report in the job log.
+      # exit-code "0" = report only. Change to "1" later to FAIL the
+      # pipeline on CRITICAL/HIGH vulnerabilities.
+      - name: Trivy scan (table)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      # Same scan as SARIF so results show up in GitHub -> Security tab
+      - name: Trivy scan (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true   # code scanning may not be enabled
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+      # Push only on pushes to main (never on pull requests)
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image to GHCR
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/boutique/${{ matrix.service }}:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/boutique/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
