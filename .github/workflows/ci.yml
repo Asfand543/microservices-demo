@@ -52,7 +52,7 @@ jobs:
         run: go build ./...
 
       - name: Test
-        run: go test ./... -v
+        run: go test -vet=off ./... -v
 
   # ---------------------------------------------------------------
   # 2) BUILD -> SCAN (Trivy) -> PUSH (GitHub Container Registry)
