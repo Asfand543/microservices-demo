@@ -119,7 +119,7 @@ jobs:
       # exit-code "0" = report only. Change to "1" later to FAIL the
       # pipeline on CRITICAL/HIGH vulnerabilities.
       - name: Trivy scan (table)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: ${{ env.LOCAL_IMAGE }}
           format: table
