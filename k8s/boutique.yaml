@@ -476,6 +476,8 @@ metadata:
   name: frontend
   labels:
     app: frontend
+  annotations:
+    gitops-test: "v1"
 spec:
   selector:
     matchLabels:
