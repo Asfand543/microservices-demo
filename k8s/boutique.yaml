@@ -687,7 +687,7 @@ spec:
   selector:
     matchLabels:
       app: loadgenerator
-  replicas: 3
+  replicas: 
   template:
     metadata:
       labels:
@@ -940,6 +940,7 @@ spec:
           readOnlyRootFilesystem: true
         image: ghcr.io/asfand543/boutique/paymentservice:latest
         ports:
+
         - containerPort: 50051
         env:
         - name: PORT
