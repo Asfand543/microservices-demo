@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Kubernetes Manifest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show changed Git revision
+        run: |
+          git log -1 --oneline
+
+      - name: Validate manifest file exists
+        run: |
+          test -f k8s/boutique.yaml
+          echo "k8s/boutique.yaml found successfully"
+
+      - name: Show manifest metadata
+        run: |
+          grep -E '^(apiVersion|kind|  name:)' k8s/boutique.yaml | head -30
+
