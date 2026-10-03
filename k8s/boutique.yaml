@@ -479,6 +479,7 @@ metadata:
   annotations:
     gitops-test: "v1"
 spec:
+  replics: 3
   selector:
     matchLabels:
       app: frontend
