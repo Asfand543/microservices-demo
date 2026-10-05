@@ -6,7 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-observability
 spec:
-  project: default
+  project: boutique-platform
   source:
     repoURL: https://github.com/Asfand543/microservices-demo.git
     targetRevision: HEAD
