@@ -1,0 +1,46 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: argocd-boutique-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: argocd.boutique.rules
+      interval: 30s
+      rules:
+        - alert: BoutiqueApplicationOutOfSync
+          expr: argocd_app_info{name="boutique", sync_status!="Synced"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Boutique application is OutOfSync"
+            description: >-
+              Argo CD application {{ $labels.name }} has not matched the Git desired state
+              for over 5 minutes. Current sync status: {{ $labels.sync_status }}.
+
+        - alert: BoutiqueApplicationUnhealthy
+          expr: argocd_app_info{name="boutique", health_status!="Healthy"} == 1
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Boutique application is unhealthy"
+            description: >-
+              Argo CD application {{ $labels.name }} has not been Healthy for over
+              5 minutes. Current health status: {{ $labels.health_status }}.
+
+        - alert: ArgoCDMetricsScrapeFailed
+          expr: up{job="argocd-metrics"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Prometheus cannot scrape Argo CD metrics"
+            description: >-
+              Prometheus has failed to scrape {{ $labels.job }} for more than 2 minutes.
